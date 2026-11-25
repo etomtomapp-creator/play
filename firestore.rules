@@ -1,0 +1,355 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global Safety Net: Default-deny all unmatched paths
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Primitive Helpers ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAppAdmin() {
+      return isVerifiedUser() && (
+        request.auth.token.email == 'jobaerulalam123@gmail.com' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isRoomMember(roomId) {
+      return isSignedIn() && (
+        get(/databases/$(database)/documents/rooms/$(roomId)).data.adminId == request.auth.uid ||
+        exists(/databases/$(database)/documents/rooms/$(roomId)/participants/$(request.auth.uid))
+      );
+    }
+
+    // --- Validation Blueprints (Anti-Update-Gap) ---
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['userId', 'displayName', 'avatar', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['userId', 'displayName', 'avatar', 'createdAt', 'updatedAt'])
+        && isValidId(data.userId)
+        && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 40
+        && data.avatar is string && data.avatar.size() >= 1 && data.avatar.size() <= 256
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidRoom(data) {
+      return data.keys().hasAll([
+          'roomCode', 'adminId', 'status', 'maxParticipants',
+          'chatEnabled', 'isLocked', 'createdAt', 'updatedAt', 'expiresAt'
+        ])
+        && data.keys().hasOnly([
+          'roomCode', 'adminId', 'adminName', 'adminAvatar', 'adminOnline',
+          'title', 'status', 'maxParticipants', 'chatEnabled', 'isLocked',
+          'videoSource', 'videoId', 'videoTitle', 'videoFileSize', 'videoDuration',
+          'videoDeliveryMode', 'videoAddedAtMs',
+          'playbackPlaying', 'playbackPosition', 'playbackRate', 'playbackUpdatedAtMs',
+          'createdAt', 'updatedAt', 'expiresAt'
+        ])
+        && data.roomCode is string && data.roomCode.size() >= 8 && data.roomCode.size() <= 12 && data.roomCode.matches('^SW-[A-Z0-9]{5}$')
+        && isValidId(data.adminId)
+        && (!('adminName' in data) || (data.adminName is string && data.adminName.size() >= 1 && data.adminName.size() <= 40))
+        && (!('adminAvatar' in data) || (data.adminAvatar is string && data.adminAvatar.size() >= 1 && data.adminAvatar.size() <= 256))
+        && (!('adminOnline' in data) || data.adminOnline is bool)
+        && data.status in ['active', 'ended']
+        && data.maxParticipants is int && data.maxParticipants >= 2 && data.maxParticipants <= 8
+        && data.chatEnabled is bool
+        && data.isLocked is bool
+        && (!('title' in data) || (data.title is string && data.title.size() >= 1 && data.title.size() <= 80))
+        && (!('videoSource' in data) || data.videoSource in ['none', 'youtube', 'gallery'])
+        && (!('videoId' in data) || (data.videoId is string && data.videoId.size() <= 128))
+        && (!('videoTitle' in data) || (data.videoTitle is string && data.videoTitle.size() <= 160))
+        && (!('videoFileSize' in data) || (data.videoFileSize is number && data.videoFileSize >= 0))
+        && (!('videoDuration' in data) || (data.videoDuration is number && data.videoDuration >= 0))
+        && (!('videoDeliveryMode' in data) || data.videoDeliveryMode in ['webrtc', 'relay'])
+        && (!('videoAddedAtMs' in data) || (data.videoAddedAtMs is number && data.videoAddedAtMs >= 0))
+        && (!('playbackPlaying' in data) || data.playbackPlaying is bool)
+        && (!('playbackPosition' in data) || (data.playbackPosition is number && data.playbackPosition >= 0))
+        && (!('playbackRate' in data) || (data.playbackRate is number && data.playbackRate >= 0.25 && data.playbackRate <= 2.5))
+        && (!('playbackUpdatedAtMs' in data) || (data.playbackUpdatedAtMs is number && data.playbackUpdatedAtMs >= 0))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        && data.expiresAt is timestamp;
+    }
+
+    function isValidParticipant(data) {
+      return data.keys().hasAll([
+          'userId', 'roomId', 'roomAdminId', 'displayName', 'avatar',
+          'role', 'isOnline', 'joinedAt', 'lastSeenAt'
+        ])
+        && data.keys().hasOnly([
+          'userId', 'roomId', 'roomAdminId', 'displayName', 'avatar',
+          'role', 'isOnline', 'joinedAt', 'lastSeenAt'
+        ])
+        && isValidId(data.userId)
+        && data.roomId is string && data.roomId.size() >= 8 && data.roomId.size() <= 12 && data.roomId.matches('^SW-[A-Z0-9]{5}$')
+        && isValidId(data.roomAdminId)
+        && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 40
+        && data.avatar is string && data.avatar.size() >= 1 && data.avatar.size() <= 256
+        && data.role in ['admin', 'viewer']
+        && data.isOnline is bool
+        && data.joinedAt is timestamp
+        && data.lastSeenAt is timestamp;
+    }
+
+    function isValidMessage(data) {
+      return data.keys().hasAll([
+          'roomId', 'senderId', 'roomAdminId', 'senderName', 'senderAvatar',
+          'senderRole', 'text', 'reactions', 'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'roomId', 'senderId', 'roomAdminId', 'senderName', 'senderAvatar',
+          'senderRole', 'text', 'reactions', 'createdAt'
+        ])
+        && data.roomId is string && data.roomId.size() >= 8 && data.roomId.size() <= 12 && data.roomId.matches('^SW-[A-Z0-9]{5}$')
+        && isValidId(data.senderId)
+        && isValidId(data.roomAdminId)
+        && data.senderName is string && data.senderName.size() >= 1 && data.senderName.size() <= 40
+        && data.senderAvatar is string && data.senderAvatar.size() >= 1 && data.senderAvatar.size() <= 256
+        && data.senderRole in ['admin', 'viewer']
+        && data.text is string && data.text.size() >= 1 && data.text.size() <= 600
+        && data.reactions is map && data.reactions.size() <= 12
+        && data.createdAt is timestamp;
+    }
+
+    function isValidSignal(data) {
+      return data.keys().hasAll(['fromId', 'toId', 'signalType', 'payload', 'createdAt'])
+        && data.keys().hasOnly(['fromId', 'toId', 'signalType', 'payload', 'createdAt'])
+        && isValidId(data.fromId)
+        && isValidId(data.toId)
+        && data.signalType in ['request-stream', 'offer', 'answer', 'ice', 'fallback-needed']
+        && data.payload is string && data.payload.size() <= 16000
+        && data.createdAt is timestamp;
+    }
+
+    // --- Collection: /admins/{adminId} ---
+    match /admins/{adminId} {
+      allow get: if isSignedIn() && isValidId(adminId) && (isOwner(adminId) || isAppAdmin());
+      allow list, create, update, delete: if false;
+    }
+
+    // --- Collection: /users/{userId} ---
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && (isOwner(userId) || isAppAdmin());
+      allow list: if false;
+      allow create: if isVerifiedUser()
+        && isValidId(userId)
+        && isOwner(userId)
+        && isValidUserProfile(incoming())
+        && incoming().userId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser()
+        && isValidId(userId)
+        && isValidUserProfile(incoming())
+        && incoming().userId == existing().userId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAppAdmin() ||
+          (isOwner(userId) && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'avatar', 'updatedAt']))
+        );
+      allow delete: if isVerifiedUser() && isValidId(userId) && (isOwner(userId) || isAppAdmin());
+    }
+
+    // --- Collection: /rooms/{roomId} ---
+    match /rooms/{roomId} {
+      allow get: if isSignedIn() && isValidId(roomId);
+      allow list: if isSignedIn() && (resource.data.adminId == request.auth.uid || isAppAdmin());
+      allow create: if isVerifiedUser()
+        && isValidId(roomId)
+        && isValidRoom(incoming())
+        && incoming().adminId == request.auth.uid
+        && incoming().roomCode == roomId
+        && incoming().status == 'active'
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser()
+        && isValidId(roomId)
+        && isValidRoom(incoming())
+        && incoming().adminId == existing().adminId
+        && incoming().roomCode == existing().roomCode
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAppAdmin() ||
+          (
+            existing().status != 'ended'
+            && existing().adminId == request.auth.uid
+            && (
+              incoming().diff(existing()).affectedKeys().hasOnly([
+                'videoSource', 'videoId', 'videoTitle', 'videoFileSize', 'videoDuration',
+                'videoDeliveryMode', 'videoAddedAtMs',
+                'playbackPlaying', 'playbackPosition', 'playbackRate', 'playbackUpdatedAtMs', 'updatedAt'
+              ]) ||
+              incoming().diff(existing()).affectedKeys().hasOnly([
+                'playbackPlaying', 'playbackPosition', 'playbackRate', 'playbackUpdatedAtMs', 'updatedAt'
+              ]) ||
+              incoming().diff(existing()).affectedKeys().hasOnly([
+                'title', 'maxParticipants', 'chatEnabled', 'isLocked', 'updatedAt'
+              ]) ||
+              incoming().diff(existing()).affectedKeys().hasOnly([
+                'adminName', 'adminAvatar', 'adminOnline', 'updatedAt'
+              ]) ||
+              incoming().diff(existing()).affectedKeys().hasOnly([
+                'status', 'updatedAt'
+              ])
+            )
+          )
+        );
+      allow delete: if isVerifiedUser()
+        && isValidId(roomId)
+        && (existing().adminId == request.auth.uid || isAppAdmin());
+
+      // --- Subcollection: /rooms/{roomId}/participants/{participantId} ---
+      match /participants/{participantId} {
+        allow get: if isSignedIn()
+          && isValidId(roomId)
+          && isValidId(participantId)
+          && (participantId == request.auth.uid || isRoomMember(roomId) || isAppAdmin());
+        allow list: if isSignedIn()
+          && (resource.data.roomId == roomId || isAppAdmin());
+        allow create: if isVerifiedUser()
+          && isValidId(roomId)
+          && isValidId(participantId)
+          && participantId == request.auth.uid
+          && isValidParticipant(incoming())
+          && incoming().userId == request.auth.uid
+          && incoming().roomId == roomId
+          && incoming().joinedAt == request.time
+          && incoming().lastSeenAt == request.time
+          && exists(/databases/$(database)/documents/rooms/$(roomId))
+          && incoming().roomAdminId == get(/databases/$(database)/documents/rooms/$(roomId)).data.adminId
+          && (
+            (incoming().role == 'admin' && get(/databases/$(database)/documents/rooms/$(roomId)).data.adminId == request.auth.uid) ||
+            (
+              incoming().role == 'viewer'
+              && get(/databases/$(database)/documents/rooms/$(roomId)).data.status == 'active'
+              && get(/databases/$(database)/documents/rooms/$(roomId)).data.isLocked == false
+            )
+          );
+        allow update: if isVerifiedUser()
+          && isValidId(roomId)
+          && isValidId(participantId)
+          && isValidParticipant(incoming())
+          && incoming().userId == existing().userId
+          && incoming().roomId == existing().roomId
+          && incoming().roomAdminId == existing().roomAdminId
+          && incoming().role == existing().role
+          && incoming().joinedAt == existing().joinedAt
+          && incoming().lastSeenAt == request.time
+          && (
+            isAppAdmin() ||
+            (
+              participantId == request.auth.uid
+              && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'avatar', 'isOnline', 'lastSeenAt'])
+            )
+          );
+        allow delete: if isVerifiedUser()
+          && isValidId(roomId)
+          && isValidId(participantId)
+          && (
+            participantId == request.auth.uid ||
+            get(/databases/$(database)/documents/rooms/$(roomId)).data.adminId == request.auth.uid ||
+            isAppAdmin()
+          );
+      }
+
+      // --- Subcollection: /rooms/{roomId}/messages/{messageId} ---
+      match /messages/{messageId} {
+        allow get: if isSignedIn()
+          && isValidId(roomId)
+          && isValidId(messageId)
+          && (isRoomMember(roomId) || isAppAdmin());
+        allow list: if isSignedIn()
+          && (resource.data.roomId == roomId || isAppAdmin());
+        allow create: if isVerifiedUser()
+          && isValidId(roomId)
+          && isValidId(messageId)
+          && isValidMessage(incoming())
+          && incoming().roomId == roomId
+          && incoming().senderId == request.auth.uid
+          && incoming().createdAt == request.time
+          && exists(/databases/$(database)/documents/rooms/$(roomId))
+          && incoming().roomAdminId == get(/databases/$(database)/documents/rooms/$(roomId)).data.adminId
+          && get(/databases/$(database)/documents/rooms/$(roomId)).data.status == 'active'
+          && (
+            get(/databases/$(database)/documents/rooms/$(roomId)).data.chatEnabled == true ||
+            get(/databases/$(database)/documents/rooms/$(roomId)).data.adminId == request.auth.uid
+          )
+          && isRoomMember(roomId);
+        allow update: if isVerifiedUser()
+          && isValidId(roomId)
+          && isValidId(messageId)
+          && isValidMessage(incoming())
+          && incoming().roomId == existing().roomId
+          && incoming().senderId == existing().senderId
+          && incoming().roomAdminId == existing().roomAdminId
+          && incoming().senderName == existing().senderName
+          && incoming().senderAvatar == existing().senderAvatar
+          && incoming().senderRole == existing().senderRole
+          && incoming().text == existing().text
+          && incoming().createdAt == existing().createdAt
+          && incoming().diff(existing()).affectedKeys().hasOnly(['reactions'])
+          && exists(/databases/$(database)/documents/rooms/$(roomId))
+          && get(/databases/$(database)/documents/rooms/$(roomId)).data.status == 'active'
+          && isRoomMember(roomId);
+        allow delete: if isVerifiedUser()
+          && isValidId(roomId)
+          && isValidId(messageId)
+          && (
+            existing().senderId == request.auth.uid ||
+            get(/databases/$(database)/documents/rooms/$(roomId)).data.adminId == request.auth.uid ||
+            isAppAdmin()
+          );
+      }
+
+      // --- Subcollection: /rooms/{roomId}/signals/{signalId} ---
+      match /signals/{signalId} {
+        allow get: if isSignedIn()
+          && isValidId(roomId)
+          && isValidId(signalId)
+          && (existing().fromId == request.auth.uid || existing().toId == request.auth.uid || isAppAdmin());
+        allow list: if isSignedIn()
+          && (resource.data.toId == request.auth.uid || resource.data.fromId == request.auth.uid || isAppAdmin());
+        allow create: if isVerifiedUser()
+          && isValidId(roomId)
+          && isValidId(signalId)
+          && isValidSignal(incoming())
+          && incoming().fromId == request.auth.uid
+          && incoming().createdAt == request.time
+          && exists(/databases/$(database)/documents/rooms/$(roomId))
+          && get(/databases/$(database)/documents/rooms/$(roomId)).data.status == 'active'
+          && isRoomMember(roomId);
+        allow update: if false;
+        allow delete: if isVerifiedUser()
+          && isValidId(roomId)
+          && isValidId(signalId)
+          && (existing().fromId == request.auth.uid || existing().toId == request.auth.uid || isAppAdmin());
+      }
+    }
+  }
+}

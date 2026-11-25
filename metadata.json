@@ -1,0 +1,6 @@
+{
+  "name": "SyncWatch",
+  "description": "Private real-time watch-party platform to watch YouTube videos and locally downloaded movies together in sync while chatting.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

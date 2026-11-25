@@ -1,0 +1,323 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Authenticated user display preferences persisted in Firestore without PII.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "avatar": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["userId", "displayName", "avatar", "createdAt", "updatedAt"]
+    },
+    "WatchRoom": {
+      "title": "WatchRoom",
+      "description": "Private watch-party room metadata and authoritative Admin playback state.",
+      "type": "object",
+      "properties": {
+        "roomCode": {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 12,
+          "pattern": "^SW-[A-Z0-9]{5}$"
+        },
+        "adminId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "adminName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "adminAvatar": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "adminOnline": {
+          "type": "boolean"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "ended"]
+        },
+        "maxParticipants": {
+          "type": "integer"
+        },
+        "chatEnabled": {
+          "type": "boolean"
+        },
+        "isLocked": {
+          "type": "boolean"
+        },
+        "videoSource": {
+          "type": "string",
+          "enum": ["none", "youtube", "gallery"]
+        },
+        "videoId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "videoTitle": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "videoFileSize": {
+          "type": "number"
+        },
+        "videoDuration": {
+          "type": "number"
+        },
+        "videoDeliveryMode": {
+          "type": "string",
+          "enum": ["webrtc", "relay"]
+        },
+        "videoAddedAtMs": {
+          "type": "number"
+        },
+        "playbackPlaying": {
+          "type": "boolean"
+        },
+        "playbackPosition": {
+          "type": "number"
+        },
+        "playbackRate": {
+          "type": "number"
+        },
+        "playbackUpdatedAtMs": {
+          "type": "number"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "expiresAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "roomCode",
+        "adminId",
+        "status",
+        "maxParticipants",
+        "chatEnabled",
+        "isLocked",
+        "createdAt",
+        "updatedAt",
+        "expiresAt"
+      ]
+    },
+    "RoomParticipant": {
+      "title": "RoomParticipant",
+      "description": "Participant membership record inside a private watch room.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "roomId": {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 12,
+          "pattern": "^SW-[A-Z0-9]{5}$"
+        },
+        "roomAdminId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "avatar": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "role": {
+          "type": "string",
+          "enum": ["admin", "viewer"]
+        },
+        "isOnline": {
+          "type": "boolean"
+        },
+        "joinedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "lastSeenAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "userId",
+        "roomId",
+        "roomAdminId",
+        "displayName",
+        "avatar",
+        "role",
+        "isOnline",
+        "joinedAt",
+        "lastSeenAt"
+      ]
+    },
+    "RoomMessage": {
+      "title": "RoomMessage",
+      "description": "Chat message sent inside a watch room.",
+      "type": "object",
+      "properties": {
+        "roomId": {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 12,
+          "pattern": "^SW-[A-Z0-9]{5}$"
+        },
+        "senderId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "roomAdminId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "senderName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "senderAvatar": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "senderRole": {
+          "type": "string",
+          "enum": ["admin", "viewer"]
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 600
+        },
+        "reactions": {
+          "type": "object"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "roomId",
+        "senderId",
+        "roomAdminId",
+        "senderName",
+        "senderAvatar",
+        "senderRole",
+        "text",
+        "reactions",
+        "createdAt"
+      ]
+    },
+    "WebRtcSignal": {
+      "title": "WebRtcSignal",
+      "description": "Ephemeral WebRTC signaling message between Admin and Viewer for local gallery streaming.",
+      "type": "object",
+      "properties": {
+        "fromId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "toId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "signalType": {
+          "type": "string",
+          "enum": ["request-stream", "offer", "answer", "ice", "fallback-needed"]
+        },
+        "payload": {
+          "type": "string",
+          "maxLength": 16000
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["fromId", "toId", "signalType", "payload", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Authenticated user display profiles isolated per user ID."
+    },
+    "/rooms/{roomId}": {
+      "schema": { "$ref": "#/entities/WatchRoom" },
+      "description": "Private SyncWatch rooms controlled solely by their creator Admin."
+    },
+    "/rooms/{roomId}/participants/{participantId}": {
+      "schema": { "$ref": "#/entities/RoomParticipant" },
+      "description": "Participants belonging to a specific SyncWatch room."
+    },
+    "/rooms/{roomId}/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/RoomMessage" },
+      "description": "Chat messages belonging to a specific SyncWatch room."
+    },
+    "/rooms/{roomId}/signals/{signalId}": {
+      "schema": { "$ref": "#/entities/WebRtcSignal" },
+      "description": "WebRTC peer signaling messages for live Gallery video streaming on static hosts."
+    }
+  }
+}
